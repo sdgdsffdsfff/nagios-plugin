@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# Return codes:
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+
+ErrInfo=$(dmesg |grep error)
+
+if [ $(echo $ErrInfo|wc -l) -ne 0 ]
+then
+        echo "no error output"
+        exit ${STATE_OK}
+else
+        echo $ErrInfo
+        exit ${STATE_WARNING}
+fi
