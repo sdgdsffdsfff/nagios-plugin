@@ -1,0 +1,88 @@
+#!/bin/sh
+
+PATH=$PATH:/usr/sbin:/usr/bin
+DIFF=$(which diff)
+DIRNAME=$(which dirname)
+
+#/*
+# * 文件或目录检查函数
+# * @arg1是shell的文件状态检查的参数,具体使用参考shell编程test用法
+# * @arg2是待检查的文件或目录
+#*/
+function func_check_file()
+{
+        type=$1
+        filepath=$2
+        if [ ! -$type "$filepath" ]; then
+                echo "UNKNOWN - Error: $filepath dont existed; Please check this file path."
+                exit 3
+        fi
+}
+
+#/*
+# * 帮助
+#*/
+function usage() {
+        echo "UNKNOWN - Usage: $0 [OPTIONS]"
+        echo "  -t :RAID控制机厂家名[hp|dell]"
+        echo "  -h :帮助"
+        echo "" 
+} 
+
+################################################
+######    Main program start execute      ######
+################################################
+
+#/*
+# * 获取命令行参数
+#*/
+while getopts "t:h:" OPT
+do
+        case $OPT in
+                t)  TYPE=$OPTARG
+                ;;
+                h)  usage
+                        exit 3
+                ;;
+                \?) usage
+                        exit 3
+                ;;
+        esac
+done
+
+if [ $OPTIND -le 1 ];then
+        usage
+        exit 3
+fi
+
+#/*
+# * 通过服务器厂商判断RAID控制机类型
+#*/
+case $TYPE in
+        hp)
+                RaidCfgCli="/usr/sbin/hpacucli controller all show config detail"
+        ;;
+        dell)
+                RaidCfgCli="/opt/MegaRAID/MegaCli/MegaCli64 -PDList -aALL"
+        ;;
+esac
+
+WorkDir=$( $DIRNAME $0 )
+cd $WorkDir
+func_check_file f $WorkDir/raid_status.initial
+
+$RaidCfgCli >raid_status.current 2>&1
+
+diff_ret=$( $DIFF raid_status.initial raid_status.current )
+
+if [ -n "$diff_ret" ]
+then
+        echo "WARNING - RAID Status Failed"
+        exit 1
+else
+        echo "OK - RAID Status OK"
+        rm raid_status.current
+        exit 0
+fi
+
+exit 0
