@@ -1,0 +1,142 @@
+#! /bin/sh
+#/************************************************************************
+# * Copyright (c) 2013 doujinshuai (doujinshuai@gmail.com)
+# * Create Time   : 01-31-2013
+# * Last Modified : 01-31-2013
+# ************************************************************************/
+
+
+################################################
+######          initializers              ######
+################################################
+
+# For non-standardized mysql installation
+MysqlPath=""
+
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+STATE_DEPENDENT=4
+crit="No"
+null="NULL"
+ok="Yes"
+
+
+################################################
+######       Function Define start        ######
+################################################
+function check_args(){
+    [ -n "$UserName" -a -n "$PassWord" ] && LoginOptions=$LoginOptions" -u $UserName -p$PassWord"
+    [ -n "$Host" -a -n "$Port" ] && LoginOptions=$LoginOptions" -h $Host -P $Port"
+
+    [ -d "$MysqlPath" -a -f "$MysqlPath/mysql" ] && MySQL_BIN=$MysqlPath/mysql || MySQL_BIN=$(which mysql)
+    [ ! -f "$MySQL_BIN" ] && { echo "Please check command: mysql install"; exit $STATE_UNKNOWN; }
+}
+
+function check_slave_status(){
+    monitor_item=$1
+    monitor_item=${monitor_item:="Slave_IO_Running"}
+    if [ $monitor_item != "Slave_IO_Running" -a $monitor_item != "Slave_SQL_Running" ]; then
+        echo CRITICAL -  $monitor_item is unknow status
+        exit $STATE_UNKNOWN
+    fi
+
+    answer=$($MySQL_BIN $LoginOptions -e 'show slave status\G' | /bin/grep "$monitor_item" | /bin/cut -f2 -d:)
+    # if null, critical
+    if [ $answer = $null ]; then 
+        echo CRITICAL - $Host - $monitor_item is answering $answer 
+        exit $STATE_CRITICAL;
+    fi
+    if [ $answer = $crit ]; then 
+        echo CRITICAL - $Host - $monitor_item status: $answer
+        exit $STATE_CRITICAL;
+    fi
+    if [ $answer = $ok ]; then
+        echo OK - $Host - $monitor_item status: $answer
+        exit $STATE_OK;
+    fi
+}
+
+function check_slave_slow(){
+    monitor_item=$1
+    seconds_behind=$2
+    monitor_item=${monitor_item:="Seconds_Behind_Master"}
+    if [ $monitor_item != "Seconds_Behind_Master" ]; then
+        echo CRITICAL - $monitor_item is unknow status
+        exit $STATE_UNKNOWN
+    fi
+    seconds_behind=${seconds_behind:=0}
+    if [ -z "$seconds_behind" ]; then
+        echo CRITICAL - $seconds_behind can not be empty
+        exit $STATE_UNKNOWN
+    fi
+
+    answer=$($MySQL_BIN $LoginOptions -e 'show slave status\G' | /bin/grep "$monitor_item" | /bin/cut -f2 -d:)
+    # if null, critical
+    if [ $answer = $null ]; then 
+        echo CRITICAL - $Host - $monitor_item is answering $answer 
+        exit $STATE_CRITICAL;
+    fi
+    if [ $answer -gt $seconds_behind ]; then 
+        echo CRITICAL - $Host - $monitor_item is $answer greater than $seconds_behind
+        exit $STATE_CRITICAL;
+    else
+        echo OK - $Host - $monitor_item status: $answer
+        exit $STATE_OK;
+    fi
+}
+
+#/*
+# *
+# */
+function usage ()
+{
+    echo "Usage: $0 [OPTIONS]"
+    echo "       $0 -u user -p password -H 192.168.1.100 -P 3306 -e Slave_SQL_Running"
+    echo "       $0 -u user -p password -H 192.168.1.100 -P 3306 -e Seconds_Behind_Master -s 60"
+    echo "  -u : Username"
+    echo "  -p : Password"
+    echo "  -S : Unix SOCK"
+    echo "  -H : Host"
+    echo "  -P : Port"
+    echo "  -e : Monitor Item [ Slave_SQL_Running|Slave_SQL_Running|Seconds_Behind_Master ]"
+    echo "  -s : Seconds Behind Master. default is 0"
+    echo "  -h : help"
+    echo ""
+}
+
+
+################################################
+######    Main program start execute      ######
+################################################
+
+#/*
+# *
+# */
+while getopts "u:p:H:P:e:s:h:" OPT
+do
+    case $OPT in
+        u)   UserName=$OPTARG ;;
+        p)   PassWord=$OPTARG ;;
+        H)   Host=$OPTARG ;;
+        P)   Port=$OPTARG ;;
+        e)   monitor_item=$OPTARG ;;
+        s)   seconds_behind=$OPTARG ;;
+        h)   usage
+            exit $STATE_UNKNOWN
+        ;;
+        [?]) usage
+            exit $STATE_UNKNOWN
+        ;;
+    esac
+done
+[ $OPTIND -le 1 ] && { usage; exit 1; }
+
+exitstatus=$STATE_WARNING #default
+check_args
+if [ -z "$seconds_behind" ]; then
+    check_slave_status $monitor_item
+else
+    check_slave_slow $monitor_item $seconds_behind
+fi
