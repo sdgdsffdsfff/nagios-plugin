@@ -1,5 +1,11 @@
 #!/bin/bash
 
+#/************************************************************************
+# * Copyright (c) 2013 doujinshuai (doujinshuai@gmail.com)
+# * Create Time   : 01-31-2013
+# * Last Modified : 02-25-2013
+# ************************************************************************/
+
 # Return codes:
 STATE_OK=0
 STATE_WARNING=1
