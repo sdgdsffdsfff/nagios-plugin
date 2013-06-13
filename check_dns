@@ -1,0 +1,82 @@
+#!/bin/bash
+
+#/************************************************************************
+# * Copyright (c) 2013 doujinshuai (doujinshuai@gmail.com)
+# * Create Time   : 01-31-2013
+# * Last Modified : 02-25-2013
+# ************************************************************************/
+
+# Return codes:
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+
+
+#/*
+# * help()
+# */
+function usage() {
+	echo "UNKNOWN - Usage: $0 [OPTIONS]"
+	echo "  -l dns list file"
+	echo "  -d domain name"
+	echo "  -i IP Address"
+	echo "  -h help"
+	echo "" 
+} 
+
+while getopts "l:d:i:h:" OPT
+do
+	case $OPT in
+		l)  DNS_LIST=$OPTARG
+		;;
+		d)  DOMAIN=$OPTARG
+		;;
+		i)  OK_IP=$OPTARG
+		;;
+		h)  usage
+		exit $STATE_UNKNOWN
+		;;
+		\?) usage
+		exit $STATE_UNKNOWN
+		;;
+	esac
+done
+
+if [ $OPTIND -le 1 ];then
+	usage
+	exit $STATE_UNKNOWN
+fi
+
+
+#/*
+# * main function start
+# */
+
+ErrStatus=0
+DIG_CMD=$(which dig)
+NSLOOKUP_CMD=$(which nslookup)
+[ ! -f "$DIG_CMD" -a ! -f "$NSLOOKUP_CMD" ] && { echo "Command dig or nslookup do not exist,please install it at first."; exit $STATE_UNKNOWN; }
+[ ! -f "$DNS_LIST" ] && { echo "DNS list file do not exist"; exit $STATE_UNKNOWN; }
+[ -z "$DOMAIN" ] && { echo "please input your domain name"; exit $STATE_UNKNOWN; }
+[ -z "$OK_IP" ] && { echo "please input your site ip"; exit $STATE_UNKNOWN; }
+
+while read DNS_IP
+do
+	if [ -f "$DIG_CMD" ]; then
+		IP=$( $DIG_CMD @$DNS_IP $DOMAIN | grep "^$DOMAIN" | awk '{print $NF}' )
+	else
+		IP=$( $NSLOOKUP_CMD -qt=A $DOMAIN $DNS_IP | grep 'Address' | tail -1 | awk '{print $2}' )
+	fi
+	if [ "$IP" != "$OK_IP" ]; then
+		ErrInfo=$( echo "DNS: $DNS_IP  ERR_IP: $IP\n$ErrInfo" )
+		ErrStatus=1
+	fi
+done < $DNS_LIST
+
+if [ $ErrStatus -gt 0 ]; then
+	echo -e ${ErrInfo}
+	exit ${STATE_WARNING}
+else
+	exit ${STATE_OK}
+fi
