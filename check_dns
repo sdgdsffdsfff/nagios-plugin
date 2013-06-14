@@ -54,6 +54,7 @@ fi
 # */
 
 ErrStatus=0
+
 DIG_CMD=$(which dig)
 NSLOOKUP_CMD=$(which nslookup)
 [ ! -f "$DIG_CMD" -a ! -f "$NSLOOKUP_CMD" ] && { echo "Command dig or nslookup do not exist,please install it at first."; exit $STATE_UNKNOWN; }
@@ -68,13 +69,16 @@ do
 	else
 		IP=$( $NSLOOKUP_CMD -qt=A $DOMAIN $DNS_IP | grep 'Address' | tail -1 | awk '{print $2}' )
 	fi
-	if [ "$IP" != "$OK_IP" ]; then
+	if [ -n "$IP" -a "$IP" != "$OK_IP" ]; then
 		ErrInfo=$( echo "DNS: $DNS_IP  ERR_IP: $IP\n$ErrInfo" )
-		ErrStatus=1
+		ErrStatus=$[ ErrStatus + 1 ]
 	fi
 done < $DNS_LIST
 
-if [ $ErrStatus -gt 0 ]; then
+if [ $ErrStatus -gt 5 ]; then
+	echo -e ${ErrInfo}
+	exit ${STATE_CRITICAL}
+elif [ $ErrStatus -gt 0 ]; then
 	echo -e ${ErrInfo}
 	exit ${STATE_WARNING}
 else
